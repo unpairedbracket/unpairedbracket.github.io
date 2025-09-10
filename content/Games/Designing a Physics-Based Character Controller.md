@@ -153,6 +153,8 @@ v_\mathrm{slope} = v_\mathrm{flat} \left(\sqrt{1 + \gamma^2 \frac{g_\mathrm{slop
 $$
 with a tweakable parameter $\gamma$ to allow adjusting the strength of the slope effect independently of gravity itself (within what I've discussed in this post, there's no point in this, but it might be helpful for tuning the slope effect independently of, say, jump behaviour). $\gamma = 1$ replicates the more physical behaviour for small slopes, $\gamma = 0.5$ keeps the effect of downhill gravity mostly similar to the physical model for large values of $g_\mathrm{slope}$. To make the effect of gravity feel more dramatic I have found values between $\gamma=1$ and $\gamma=10$ to work well.
 
+<iframe src="char_motion_example/side_scroll_hills.html"></iframe>
+
 ## Synthesis: All Three Dimensions
 
 Just as we've added a vertical dimension to the initial one-dimensional model to arrive at a side-scrolling 2D model, I'll now consider adding a vertical dimension to the top-down 2D controller described above. The challenge is similar: slopes and how they affect the motion[^control_plane]. As before, I want the following things:
