@@ -3,6 +3,7 @@ tags:
   - physics
   - game design
   - character control
+draft: true
 ---
 
 <style>
