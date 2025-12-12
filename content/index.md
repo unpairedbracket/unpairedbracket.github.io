@@ -2,4 +2,4 @@
 title: Ben Spiers' Blog
 ---
 
-Welcome to my blog. Once I've written some posts, you'll be able to find them in the sidebar to the left. I might even call them out on this front page
+Welcome to my blog. My latest post is [[Velocity Projection]], about the process of solving a problem to try and help speed up part of a character movement algorithm.
