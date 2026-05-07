@@ -1,10 +1,10 @@
-When simulating rigid-body dynamics in three dimensions, we quickly run into an issue that's not present in two: rotating objects in three dimensions behave in ways that can be surprising and are kind of weird.
+When simulating rigid-body dynamics in three dimensions, we quickly run into an issue that's not present in two: rotating objects in three dimensions behave in ways that can be surprising and are kind of weird. In this post I'll present a theoretical framework for describing this behaviour, then look at some existing approaches to simulating the motion of rotating rigid bodies and finally suggest a method with improved energy conservation properties, which I believe to be novel.
 
 ## First Principles
 
 In this post I'll describe the three classes of rotating objects, how they behave and how we can treat them. The dynamics of a freely rotating body can be derived from the following:
-1. An object has a *moment of inertia* $I$, the rotational analog of mass, which is constant and fixed to the object itself. The moment of inertia is a $3 \times 3$ symmetric positive-definite matrix, meaning that in some frame of reference it is a diagonal matrix with positive entries. This frame of reference rotates with the body, so I'll denote it the *body frame*. It's not really relevant here, but it makes most sense to place the origin of the body frame at the object's centre of mass, as this is the point a free object will rotate around. As it is symmetric positive-definite, The moment of inertia matrix is always invertible. I will use its inverse in this post a lot, so I will give it its own symbol: $J = I^{-1}$.
-2. An object has an *angular momentum* $L$, which is a conserved quantity for free motion (torque-free, drag-free, contact-free, you know the drill). Its length is constant in any frame of reference, and its direction is constant in any frame of reference that is not itself rotating (being a physicist, I will call such a frame of reference the *lab frame*, and I'll use this fairly interchangeably with *world-space*).
+1. An object has a *moment of inertia* $I$, the rotational analog of mass, which is constant and fixed to the object itself. The moment of inertia is a $3 \times 3$ symmetric positive-definite matrix, meaning that in some frame of reference it is a diagonal matrix with positive entries. This frame of reference rotates with the body, so I'll denote it the *body frame*. The coordinate axes of the body frame (the eigenvalues of the moment of inertia) are called the body's principal axes. It's not really relevant here, but it makes most sense to place the origin of the body frame at the object's centre of mass, as this is the point a free object will rotate around. As it is symmetric positive-definite, The moment of inertia matrix is always invertible. I will use its inverse in this post a lot, so I will give it its own symbol: $J = I^{-1}$.
+2. An object has an *angular momentum* $L$, which is a conserved quantity for free motion (torque-free, drag-free, contact-free, you know the drill). Its length is constant in any frame of reference, and its direction is constant in any frame of reference that is not itself rotating (being a physicist, I may call such a frame of reference the *lab frame*, and I'll use this fairly interchangeably with *world-space*).
 3. The object's orientation $R$, at any instantaneous point in time, rotates with an angular velocity of $\omega = J L$. In the lab frame, $L$ is constant but $I$ (and therefore $J$) is not. In the body frame, $I$ and $J$ are constant but $L$ is not. $\omega$ is not necessarily constant in either frame of reference, though it can be if $L$ is aligned with one of the object's principal axes. 
 4. The final conserved quantity is the rotational energy, half the dot product of the angular velocity and the angular momentum: $E = \frac{1}{2} \omega \cdot L = \frac{1}{2} LJL = \frac{1}{2} \omega I \omega$.
 
@@ -15,11 +15,10 @@ $$
 \begin{align*}
 R(\vec{\phi}) &= \mathbb{1} + (\sin{|\phi|}) [\hat{n}]_\times + (1 - \cos{|\phi|}) [\hat{n}]_\times^2 \\
 &= \mathbb{1} + (\mathrm{sinc}{|\phi|}) [\vec{\phi}]_\times + \frac{1}{2}\mathrm{sinc}^2{\frac{|\phi|}{2}} [\vec{\phi}]_\times^2 \\
-&= \mathbb{1} + \left(\mathrm{sinc}{\frac{|\phi|}{2}}\cos{\frac{|\phi|}{2}}\right) [\vec{\phi}]_\times + \frac{1}{2}\mathrm{sinc}^2{\frac{|\phi|}{2}} [\vec{\phi}]_\times^2 \\
 &= \mathbb{1} + \left(\mathrm{sinc}{\frac{|\phi|}{2}}\cos{\frac{|\phi|}{2}}\right) [\vec{\phi}]_\times + \frac{1}{2}\mathrm{sinc}^2{\frac{|\phi|}{2}} [\vec{\phi}]_\times^2
 \end{align*}
 $$
-A first interesting result here is that, if you're happy to conflate $\phi/2$ with $\tan(\phi/2)$ (which is common for many finite-difference rotation methods that do first order update followed by normalisation), you can get to a length-preserving rotation operation without the need for any transcendental (e.g. trigonometric or exponential) or even square root calculations!
+A first interesting result here is that, if you're happy to conflate $\phi/2$ with $\tan(\phi/2)$ (which is common for many finite-difference rotation methods that do first order update followed by normalisation), you can get to a length-preserving rotation operation without the need for any transcendental (e.g. trigonometric or exponential) or even square root calculations! (for more on this see [[Fast, Approximate Rotation Operators]])
 $$
 \begin{align*}
 \cos{x} &= \frac{1}{\sqrt{1 + \tan^2{x}}} \\
@@ -34,15 +33,16 @@ $$
 R(\vec\omega \Delta t) \cdot \vec{v} = \vec{v} + 2\frac{\vec{\omega}\times\vec{v}\ \frac{\Delta{t}}{2} + \vec{\omega}\times\left(\vec{\omega} \times \vec{v}\right)\left(\frac{\Delta{t}}{2}\right)^2 }{1 + \omega^2 (\Delta{t} / 2)^2}
 $$
 That's two cross products, a squared magnitude, some additions and a vector-scalar division, for a length-preserving rotation operation! The only compromise is that it slightly distorts time, rotating for a modified time $\omega \Delta t' = 2 \arctan(\omega \Delta{t}/2)$, meaning about 5% of the rotation angle is lost if you rotate by an eighth of a full turn in a single iteration, or about 15% for a quarter-turn per iteration.
+
 As noted earlier this is an equivalent loss of angular velocity to the explicit integration of rotations by doing $q(t + \Delta{t}) = q(t) + 1/2 \dot{q} \Delta{t}$ and then renormalising the quaternion.
-Something that's rotating _very_ fast will be limited to a maximum of a half-turn per iteration, but this can be resolved by applying the formula several times on fractions of the timestep. I'm not sure of the relative speed of these vector operations vs trig or square roots, so I'm not sure how many sub-iterations you can get away with before it gets slower to substep this formula than just calculating the trig functions directly.
-I assume this formula isn't novel, but I've never seen it before and I was surprised to see it drop out like that! I'd always assumed either trig functions or square roots would be required for length-preserving rotations.
+
+Something that's rotating _very_ fast will be limited to a maximum of a half-turn per iteration, but that's already the case for many low-order rotation approximations. I assume this formula isn't novel, but I've never seen it before and I was surprised to see it drop out like that! I'd always assumed either trig functions or square roots would be required for length-preserving rotations.
 
 _Anyway_, back to rigid-body dynamics. I'll start by going over some background, deriving the usual formulas from the conservation laws I proposed above.
 
 ## Euler's Equations
 
-Call the (constant) body-frame inertia and its inverse $I_b$ and $J_b$ respectively. In the lab frame, we can compute the world-space inertia matrix (and its inverse):
+Call the (constant) body-frame inertia and its inverse $I_b$ and $J_b$ respectively. If the body has an orientation (or "attitude") given by the rotation matrix $R$, then in the lab frame, we can compute the world-space inertia matrix (and its inverse):
 $$
 \begin{align*}
 I_w = R\ I_b\ R^T \\
@@ -54,7 +54,7 @@ We can also calculate the body-space angular momentum:
 $$
 L_b = R^T L_w
 $$
-From angular momentum conservation the  evolution of the angular velocity follows:
+The evolution of the angular velocity follows from angular momentum conservation :
 $$
 \begin{align*}
 \frac{d\omega_w}{dt} &= \frac{d(J_wL_w)}{dt} \\
@@ -123,6 +123,8 @@ I like these equations because they involve only quantities that are constant in
 
 Note that just knowing the evolution of the angular momentum (or angular velocity) vector in body space does not _fully_ specify the solution we're looking for, that is the evolution of the object's orientation in world space. The body-space solution is blind to rotations of the body around the angular momentum, as these do not affect the body-space angular momentum.
 
+A full solution can be obtained by choosing a unit vector orthogonal to the angular momentum, call it $v$. Then, the motion of the body consists of choosing the rotation which both fulfils the Euler equations *and* maintains the direction of $v$ in world-space. The evolution of $v$ in world-space is constrained to the plane perpendicular to the angular momentum, so it can be described as a rotation around the angular momentum. Composing the rotation induced by evolving the Euler equations (to keep $L$ and $v$ constant in world-space) with a rotation around $L$ itself (to match the needed evolution of $v$ in world-space) produces the full dynamics.
+
 A full solution is treated in the excellent paper [Numerical implementation of the exact dynamics of
 free rigid bodies](https://arxiv.org/pdf/cond-mat/0607529). The authors advocate for implementing the exact solutions in terms of Jacobi functions, which I will not advocate for here. I might do some noodling with them at some point later though. 
 
@@ -133,9 +135,13 @@ Now I've covered the general shape of the problem, I will focus on the three par
 If we're just thinking about the most symmetric objects, everything is fine. Spheres and cubes fit into this category, as do other platonic solids. The moment of inertia of an object in this category is isotropic - a scalar multiple of the identity matrix - which means that their angular velocity and angular momentum are always parallel to one another. In the absence of external torques, these objects will just spin around that common axis forever perfectly happily, with constant angular velocity.
 
 Euler's equations become trivial in this case, because $J_1 = J_2 = J_3$:
-$$\dot{L}_1 = 0 \qquad \dot{L_2} = 0 \qquad \dot{L_3} = 0$$
+$$
+\dot{L}_1 = 0 \qquad \dot{L_2} = 0 \qquad \dot{L_3} = 0
+$$
 To advance a simulated body by a time $\Delta t$, we can just rotate it by $\omega \Delta{t}$:
-$$R(t + \Delta t) = Q(\omega \Delta t) R(t) = Q(J L \Delta t) R(t)$$
+$$
+R(t + \Delta t) = Q(\omega \Delta t) R(t) = Q(J L \Delta t) R(t)
+$$
 
 ## The Symmetric Top
 
@@ -190,7 +196,7 @@ The long and short of it is: an asymmetric object that's rotating with angular m
 
 I'll review some prior art for solving this general case, talking through how well they obey the conservation laws I wrote at the top of this post.
 
-### Fully explicit
+### Forward Euler
 
 The most naïve approach possible is good old Forward Euler, no mitigations. 
 $$
