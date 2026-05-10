@@ -1,10 +1,10 @@
-When simulating rigid-body dynamics in three dimensions, we quickly run into an issue that's not present in two: rotating objects in three dimensions behave in ways that can be surprising and are kind of weird.
+When simulating rigid-body dynamics in three dimensions, we quickly run into an issue that's not present in two: rotating objects in three dimensions behave in ways that can be surprising and are kind of weird. In this post I'll present a theoretical framework for describing this behaviour, then look at some existing approaches to simulating the motion of rotating rigid bodies and finally suggest a method with improved energy conservation properties, which I believe to be novel.
 
 ## First Principles
 
 In this post I'll describe the three classes of rotating objects, how they behave and how we can treat them. The dynamics of a freely rotating body can be derived from the following:
-1. An object has a *moment of inertia* $I$, the rotational analog of mass, which is constant and fixed to the object itself. The moment of inertia is a $3 \times 3$ symmetric positive-definite matrix, meaning that in some frame of reference it is a diagonal matrix with positive entries. This frame of reference rotates with the body, so I'll denote it the *body frame*. It's not really relevant here, but it makes most sense to place the origin of the body frame at the object's centre of mass, as this is the point a free object will rotate around. As it is symmetric positive-definite, The moment of inertia matrix is always invertible. I will use its inverse in this post a lot, so I will give it its own symbol: $J = I^{-1}$.
-2. An object has an *angular momentum* $L$, which is a conserved quantity for free motion (torque-free, drag-free, contact-free, you know the drill). Its length is constant in any frame of reference, and its direction is constant in any frame of reference that is not itself rotating (being a physicist, I will call such a frame of reference the *lab frame*, and I'll use this fairly interchangeably with *world-space*).
+1. An object has a *moment of inertia* $I$, the rotational analog of mass, which is constant and fixed to the object itself. The moment of inertia is a $3 \times 3$ symmetric positive-definite matrix, meaning that in some frame of reference it is a diagonal matrix with positive entries. This frame of reference rotates with the body, so I'll denote it the *body frame*. The coordinate axes of the body frame (the eigenvalues of the moment of inertia) are called the body's principal axes. It's not really relevant here, but it makes most sense to place the origin of the body frame at the object's centre of mass, as this is the point a free object will rotate around. As it is symmetric positive-definite, The moment of inertia matrix is always invertible. I will use its inverse in this post a lot, so I will give it its own symbol: $J = I^{-1}$.
+2. An object has an *angular momentum* $L$, which is a conserved quantity for free motion (torque-free, drag-free, contact-free, you know the drill). Its length is constant in any frame of reference, and its direction is constant in any frame of reference that is not itself rotating (being a physicist, I may call such a frame of reference the *lab frame*, and I'll use this fairly interchangeably with *world-space*).
 3. The object's orientation $R$, at any instantaneous point in time, rotates with an angular velocity of $\omega = J L$. In the lab frame, $L$ is constant but $I$ (and therefore $J$) is not. In the body frame, $I$ and $J$ are constant but $L$ is not. $\omega$ is not necessarily constant in either frame of reference, though it can be if $L$ is aligned with one of the object's principal axes. 
 4. The final conserved quantity is the rotational energy, half the dot product of the angular velocity and the angular momentum: $E = \frac{1}{2} \omega \cdot L = \frac{1}{2} LJL = \frac{1}{2} \omega I \omega$.
 
@@ -15,11 +15,10 @@ $$
 \begin{align*}
 R(\vec{\phi}) &= \mathbb{1} + (\sin{|\phi|}) [\hat{n}]_\times + (1 - \cos{|\phi|}) [\hat{n}]_\times^2 \\
 &= \mathbb{1} + (\mathrm{sinc}{|\phi|}) [\vec{\phi}]_\times + \frac{1}{2}\mathrm{sinc}^2{\frac{|\phi|}{2}} [\vec{\phi}]_\times^2 \\
-&= \mathbb{1} + \left(\mathrm{sinc}{\frac{|\phi|}{2}}\cos{\frac{|\phi|}{2}}\right) [\vec{\phi}]_\times + \frac{1}{2}\mathrm{sinc}^2{\frac{|\phi|}{2}} [\vec{\phi}]_\times^2 \\
 &= \mathbb{1} + \left(\mathrm{sinc}{\frac{|\phi|}{2}}\cos{\frac{|\phi|}{2}}\right) [\vec{\phi}]_\times + \frac{1}{2}\mathrm{sinc}^2{\frac{|\phi|}{2}} [\vec{\phi}]_\times^2
 \end{align*}
 $$
-A first interesting result here is that, if you're happy to conflate $\phi/2$ with $\tan(\phi/2)$ (which is common for many finite-difference rotation methods that do first order update followed by normalisation), you can get to a length-preserving rotation operation without the need for any transcendental (e.g. trigonometric or exponential) or even square root calculations!
+A first interesting result here is that, if you're happy to conflate $\phi/2$ with $\tan(\phi/2)$ (which is common for many finite-difference rotation methods that do first order update followed by normalisation), you can get to a length-preserving rotation operation without the need for any transcendental (e.g. trigonometric or exponential) or even square root calculations! (for more on this see [[Fast, Approximate Rotation Operators]])
 $$
 \begin{align*}
 \cos{x} &= \frac{1}{\sqrt{1 + \tan^2{x}}} \\
@@ -34,15 +33,16 @@ $$
 R(\vec\omega \Delta t) \cdot \vec{v} = \vec{v} + 2\frac{\vec{\omega}\times\vec{v}\ \frac{\Delta{t}}{2} + \vec{\omega}\times\left(\vec{\omega} \times \vec{v}\right)\left(\frac{\Delta{t}}{2}\right)^2 }{1 + \omega^2 (\Delta{t} / 2)^2}
 $$
 That's two cross products, a squared magnitude, some additions and a vector-scalar division, for a length-preserving rotation operation! The only compromise is that it slightly distorts time, rotating for a modified time $\omega \Delta t' = 2 \arctan(\omega \Delta{t}/2)$, meaning about 5% of the rotation angle is lost if you rotate by an eighth of a full turn in a single iteration, or about 15% for a quarter-turn per iteration.
+
 As noted earlier this is an equivalent loss of angular velocity to the explicit integration of rotations by doing $q(t + \Delta{t}) = q(t) + 1/2 \dot{q} \Delta{t}$ and then renormalising the quaternion.
-Something that's rotating _very_ fast will be limited to a maximum of a half-turn per iteration, but this can be resolved by applying the formula several times on fractions of the timestep. I'm not sure of the relative speed of these vector operations vs trig or square roots, so I'm not sure how many sub-iterations you can get away with before it gets slower to substep this formula than just calculating the trig functions directly.
-I assume this formula isn't novel, but I've never seen it before and I was surprised to see it drop out like that! I'd always assumed either trig functions or square roots would be required for length-preserving rotations.
+
+Something that's rotating _very_ fast will be limited to a maximum of a half-turn per iteration, but that's already the case for many low-order rotation approximations. I assume this formula isn't novel, but I've never seen it before and I was surprised to see it drop out like that! I'd always assumed either trig functions or square roots would be required for length-preserving rotations.
 
 _Anyway_, back to rigid-body dynamics. I'll start by going over some background, deriving the usual formulas from the conservation laws I proposed above.
 
 ## Euler's Equations
 
-Call the (constant) body-frame inertia and its inverse $I_b$ and $J_b$ respectively. In the lab frame, we can compute the world-space inertia matrix (and its inverse):
+Call the (constant) body-frame inertia and its inverse $I_b$ and $J_b$ respectively. If the body has an orientation (or "attitude") given by the rotation matrix $R$, then in the lab frame, we can compute the world-space inertia matrix (and its inverse):
 $$
 \begin{align*}
 I_w = R\ I_b\ R^T \\
@@ -54,7 +54,7 @@ We can also calculate the body-space angular momentum:
 $$
 L_b = R^T L_w
 $$
-From angular momentum conservation the  evolution of the angular velocity follows:
+The evolution of the angular velocity follows from angular momentum conservation :
 $$
 \begin{align*}
 \frac{d\omega_w}{dt} &= \frac{d(J_wL_w)}{dt} \\
@@ -83,22 +83,24 @@ $$
 $$
 In the above I have used the derivative of the body's orientation, referencing point 3 above and Rodrigues' formula:
 $$
-\frac{dR}{dt} = \lim_{\Delta t \rightarrow 0} \left[
+\begin{align*}
+\frac{dR}{dt} &= \lim_{\Delta t \rightarrow 0} \left[
 \frac{R(t + \Delta t) - R(t)}{\Delta t} 
 = \frac{Q(\omega \Delta t) R(t) - R(t)}{\Delta t}
 = \frac{Q(\omega \Delta t) - \mathbb{1}}{\Delta t} R(t)
-\right] =  [\omega]_\times R(t)
-$$
-$$
-\frac{dR^T}{dt} = \lim_{\Delta t \rightarrow 0} \left[
+\right] =  [\omega]_\times R(t) \\
+\frac{dR^T}{dt} &= \lim_{\Delta t \rightarrow 0} \left[
 \frac{R^T(t + \Delta t) - R^T(t)}{\Delta t} 
 = \frac{R(t)^T Q^T(\omega \Delta t) - R^T(t)}{\Delta t}
 = R(t)^T\frac{ Q(-\omega \Delta t) - \mathbb{1}}{\Delta t}
-\right] =  -R^T(t) [\omega]_\times 
+\right] =  -R^T(t) [\omega]_\times
+\end{align*}
 $$
 
 The differential equation for the angular velocity comes out the same in both cases:
-$$ \frac{d\omega}{dt} = - J (\omega \times L) $$
+$$
+\frac{d\omega}{dt} = - J (\omega \times L)
+$$
 These are the famous Euler's equations for rigid body dynamics (not to be confused with _Euler's equation_, which describes incompressible fluids. Give someone else a go, Leonhard). In their usual formulation they're stated component-wise, in the body frame:
 $$
 \begin{align*}
@@ -109,7 +111,9 @@ I_3 \dot{\omega}_3 + (I_2 - I_1) \omega_1 \omega_2 = 0
 $$
 In the body frame, the constancy of the moment of inertia lets us get a differential equation for the evolution of the angular momentum (in world space, this is just the conservation law $dL = 0$):
 $$
+\begin{align*}
 \frac{dL_b}{dt} = \frac{dI_b\omega_b}{dt} = I_b \frac{d\omega_b}{dt} = - I_b J_b (\omega_b \times L_b) = - \omega_b \times L_b = - (J_b L_b) \times L_b
+\end{align*}
 $$
 We can write an analogous set of equations for the angular momentum in body space:
 $$
@@ -123,8 +127,10 @@ I like these equations because they involve only quantities that are constant in
 
 Note that just knowing the evolution of the angular momentum (or angular velocity) vector in body space does not _fully_ specify the solution we're looking for, that is the evolution of the object's orientation in world space. The body-space solution is blind to rotations of the body around the angular momentum, as these do not affect the body-space angular momentum.
 
-A full solution is treated in the excellent paper [Numerical implementation of the exact dynamics of
-free rigid bodies](https://arxiv.org/pdf/cond-mat/0607529). The authors advocate for implementing the exact solutions in terms of Jacobi functions, which I will not advocate for here. I might do some noodling with them at some point later though. 
+A full solution can be obtained by choosing a unit vector orthogonal to the angular momentum, call it $v$. Then, the motion of the body consists of choosing the rotation which both fulfils the Euler equations *and* maintains the direction of $v$ in world-space. The evolution of $v$ in world-space is constrained to the plane perpendicular to the angular momentum, so it can be described as a rotation around the angular momentum. Composing the rotation induced by evolving the Euler equations (to keep $L$ and $v$ constant in world-space) with a rotation around $L$ itself (to match the needed evolution of $v$ in world-space) produces the full dynamics.
+
+An analytic solution to the Euler equation is attributed to Jacobi, and is expressed in terms of the Jacobi elliptic functions, a set of integrals. Full solutions based on the Jacobi solution to the Euler equations are presented in - for example - [Numerical implementation of the exact dynamics of
+free rigid bodies](https://arxiv.org/pdf/cond-mat/0607529) and [The Exact Computation of the Free Rigid Body Motion and Its Use in Splitting Methods](https://epubs.siam.org/doi/10.1137/070704393) ([preprint](https://www.math.ntnu.no/preprint/numerics/2007/N6-2007.pdf) available). In particular, the approach proposed in the latter paper, using a unit vector proportional to the time derivative of (body-space) angular momentum as $v$, stands out to me as particularly elegant.
 
 Now I've covered the general shape of the problem, I will focus on the three particular special cases: the spherical top, the symmetric top and the asymmetric top.
 
@@ -133,9 +139,13 @@ Now I've covered the general shape of the problem, I will focus on the three par
 If we're just thinking about the most symmetric objects, everything is fine. Spheres and cubes fit into this category, as do other platonic solids. The moment of inertia of an object in this category is isotropic - a scalar multiple of the identity matrix - which means that their angular velocity and angular momentum are always parallel to one another. In the absence of external torques, these objects will just spin around that common axis forever perfectly happily, with constant angular velocity.
 
 Euler's equations become trivial in this case, because $J_1 = J_2 = J_3$:
-$$\dot{L}_1 = 0 \qquad \dot{L_2} = 0 \qquad \dot{L_3} = 0$$
+$$
+\dot{L}_1 = 0 \qquad \dot{L_2} = 0 \qquad \dot{L_3} = 0
+$$
 To advance a simulated body by a time $\Delta t$, we can just rotate it by $\omega \Delta{t}$:
-$$R(t + \Delta t) = Q(\omega \Delta t) R(t) = Q(J L \Delta t) R(t)$$
+$$
+R(t + \Delta t) = Q(\omega \Delta t) R(t) = Q(J L \Delta t) R(t)
+$$
 
 ## The Symmetric Top
 
@@ -173,7 +183,9 @@ $$
 \end{align*}
 $$
 To advance the simulated body in world space, rotate by $\Omega \Delta t$ about the object's unique axis ($R(t) \hat{z}$ in world space). I note here that this axial angular velocity is that obtained from the world-space angular momentum and a modified inverse inertia tensor $(J_w - J_\perp)$ - where the subtraction of a scalar from a matrix implicitly multiplies the scalar by the identity matrix, such that $(J_w - J_\perp) L_w = J_w L_w - J_\perp L_w$. 
-$$\Omega R(t) \hat{z} = (J_\parallel - J_\perp) L_3  R(t) \hat{z} = (J_w - J_\perp) L_w$$
+$$
+\Omega R(t) \hat{z} = (J_\parallel - J_\perp) L_3  R(t) \hat{z} = (J_w - J_\perp) L_w
+$$
 Then rotate the body around its angular momentum vector by an angle $J_\perp L_w \Delta t$. Rotating the body around the angular momentum in world space leaves the body-space angular momentum unchanged, so we still satisfy Euler's equations. Note that the "precession" angular velocity $J_\perp L_w$ and the previous, "axial" angular velocity $(J_w - J_\perp)L_w$ sum to $\omega_w = J_w L_w$. That means the instantaneous rotation of the body has angular velocity $\omega_w$, as required by point 3 above.
 
 All in all, we have:
@@ -186,11 +198,11 @@ This amounts to a "splitting" the contribution of the total angular velocity $J_
 
 The most complicated, and most general type of body is referred to as the asymmetric top. Bodies in this category have three distinct principal moments of inertia, and can "tumble" in ways that appear unpredictable and chaotic. If you're reading this, and have got this far, you're probably already aware of the [Dzhanibekov effect/Tennis racquet theorem/intermediate axis theorem](https://en.wikipedia.org/wiki/Tennis_racket_theorem). If not, the linked Wikipedia page has a bunch of nice demonstrations of it. 
 
-The long and short of it is: an asymmetric object that's rotating with angular momentum mostly aligned to its "shortest" or "longest" axis will precess in a little ellipse, similar to the way a symmetric object precesses in a circle. As the angular momentum approaches the intermediate axis, the nice ellipse distorts into a weird shape (Wikipedia compares it to a taco). If its angular momentum is close enough to the "intermediate" axis, the precessions are less like a steady, gentle rocking back and forth, and more like a periodic, violent inversion of the object. An analytic solution for this motion (the equivalent to what I presented above for the more symmetric classes of body) _does exist_, but it uses significantly more exotic special functions than the trig functions I've been relying on thus far (in Rodrigues' formulas for rotation operators). The paper [Numerical implementation of the exact dynamics of free rigid bodies](https://arxiv.org/abs/cond-mat/0607529) goes through the exact solution using the Jacobi elliptic functions $\mathrm{cn}$, $\mathrm{sn}$ and $\mathrm{dn}$ which roughly resemble $\cos$, $\sin$ and $1$ respectively. Their behaviour is modified by a parameter $0 \leq m \leq 1$ which quantifies how "taco-like" the precessions are, and increases as the angular momentum gets closer to the intermediate axis. 
+The long and short of it is: an asymmetric object that's rotating with angular momentum mostly aligned to its "shortest" or "longest" axis will precess in a little ellipse, similar to the way a symmetric object precesses in a circle. As the angular momentum approaches the intermediate axis, the nice ellipse distorts into a weird shape (Wikipedia compares it to a taco, I'd reach for pringles as a comparison). If its angular momentum is close enough to the "intermediate" axis, the precessions are less like a steady, gentle rocking back and forth, and more like a periodic, violent inversion of the object. An analytic solution for this motion (the equivalent to what I presented above for the more symmetric classes of body) _does exist_, but it uses significantly more exotic special functions than the trig functions I've been relying on thus far (in Rodrigues' formulas for rotation operators). The papers mentioned above go through the exact solution using the Jacobi elliptic functions $\mathrm{cn}$, $\mathrm{sn}$ and $\mathrm{dn}$ which roughly resemble $\cos$, $\sin$ and $1$ respectively. Their behaviour is modified by a parameter $0 \leq m \leq 1$ which quantifies how "taco-like" the precessions are, and increases as the angular momentum gets closer to the intermediate axis. 
 
 I'll review some prior art for solving this general case, talking through how well they obey the conservation laws I wrote at the top of this post.
 
-### Fully explicit
+### Forward Euler
 
 The most naïve approach possible is good old Forward Euler, no mitigations. 
 $$
@@ -240,7 +252,9 @@ $$
 2 \Delta{E} &= (J_k - J_L) L_0^2 \frac{\Delta{t}^2 k^2/L_0^2}{1 + \Delta{t}^2 k^2/L_0^2}
 \end{align*}
 $$
-Here I have introduced the notation $kJk = J_k k^2$ and similarly $L_0 J L_0 = J_L L_0^2$. The $J_k$ and $J_L$ values are the effective scalar magnitude of the matrix $J$, in the direction of $k$ and $L_0$ respectively, which are necessarily bounded by the eigenvalues of $J$ and will generally be some weighted average of those eigenvalues. The timestep-dependent factor $\frac{\Delta{t}^2 k^2/L_0^2}{1 + \Delta{t}^2 k^2/L_0^2}$ looks like a quadratic for small values of its parameter, $|k|\Delta{t}/|L_0| = |\omega_0| \Delta{t} \sin{\theta}$ but saturates to 1 as the parameter becomes large. Importantly, the sign of $\Delta{E}$ is now not necessarily positive. $(J_k - J_L)$ can be either positive or negative, and qualitative experimentation indicates that the overall effect over several timesteps is a reasonably good conservation of energy. In particular, because $J_\mathrm{min} \leq J_L \leq J_\mathrm{max}$ and $2E = J_L L^2$ and because this method explicitly conserves $L^2$, the energy is bounded from above and below: $\frac{1}{2} J_\mathrm{min} L_0^2 \leq E \leq \frac{1}{2} J_\mathrm{max} L_0^2$. I speculate that there's a stabilising effect from the $(J_k - J_L)$ term, but I've not proven this rigorously, or even tested it particularly thoroughly. 
+Here I have introduced the notation $kJk = J_k k^2$ and similarly $L_0 J L_0 = J_L L_0^2$. The $J_k$ and $J_L$ values are the effective scalar magnitude of the matrix $J$, in the direction of $k$ and $L_0$ respectively, which are necessarily bounded by the eigenvalues of $J$ and will generally be some weighted average of those eigenvalues. The timestep-dependent factor $\frac{\Delta{t}^2 k^2/L_0^2}{1 + \Delta{t}^2 k^2/L_0^2}$ looks like a quadratic for small values of its parameter, $|k|\Delta{t}/|L_0| = |\omega_0| \Delta{t} \sin{\theta}$ but saturates to 1 as the parameter becomes large. Importantly, the sign of $\Delta{E}$ is now not necessarily positive. $(J_k - J_L)$ can be either positive or negative, and qualitative experimentation indicates that the overall effect over several timesteps is a reasonably good conservation of energy. In particular, because $J_\mathrm{min} \leq J_L \leq J_\mathrm{max}$ and $2E = J_L L^2$ and because this method explicitly conserves $L^2$, the energy is bounded from above and below: $\frac{1}{2} J_\mathrm{min} L_0^2 \leq E \leq \frac{1}{2} J_\mathrm{max} L_0^2$.
+
+When applied to a cylindrical body, it's not too hard to see that $J_k$ is a constant, $J_k = J_\perp$. Because $2 \Delta{E} = \Delta{J_L} L_0^2$, for cylindrical bodies this looks like an evolution towards $J_L = J_\perp$, and bodies of this type will slowly align their multiplicity-2 axis with their angular momentum. For oblate (puck-like) bodies $J_\perp < J_\parallel$ and so energy is lost; for prolate (rugby ball-like) bodies $J_\perp > J_\parallel$ so energy is gained. In both cases the energy is bounded by $L_0^2 J_\perp / 2$, though.
 
 ### Rotating the Angular Momentum
 
@@ -419,77 +433,69 @@ As expected, exact conservation for the symmetric top!
 
 ### Going Further
 
-At this point I'm going to step beyond anything I'd necessarily suggest anyone actually implement, and talk about how we can improve on the above result. One thing we can do is write a condition relating $\Omega$ to both $L(t)$ and $L(t + \Delta{t})$. Then the hope is that we can expand that condition as a power series in $\Delta{t}$ and get higher-order $J'(\Delta{t})$. Let's try it:
+If we'd like to go further than this, I'll refer back to the algorithm mentioned above: evolve $L$ according to the Euler equations, then figure out the rotation that takes $L(t)$ and $k(t)$ to $L(t+\Delta{t})$ and $k(t + \Delta{t})$ respectively. Rotate the body by the inverse of that rotation, then rotate it around $L$ to achieve the correct rotation of $k$ in world-space.
 
-One thing that we know about rotating $L(t)$ about some scaled axis $\Omega \Delta{t}$ to find $L(t + \Delta{t})$ is that the dot product between a vector and the axis of rotation is invariant under the rotation. That is:
-$$
-L(t) \cdot \Omega = L(t + \Delta{t}) \cdot \Omega
-$$
-Rearrange this to get at $J'$:
+Now, I'll define a "dynamical basis" formed from three orthogonal unit vectors at a given time:
 $$
 \begin{align*}
-[L(t + \Delta{t}) - L(t)] &\cdot (\omega_0 - J' L_0) = 0 \\
-J' &= \frac{\omega_0 \cdot \Delta{L}}{L_0 \cdot \Delta{L}} 
+\hat{u}(t) &= \frac{L(t)}{|L(t)|} \\
+\hat{v}(t) &= \frac{k(t)}{|k(t)|} \\
+\hat{w}(t) &= \frac{L(t) \times k(t)}{|L(t) \times k(t)|} = \frac{L(t)^2 \omega(t) - (\omega(t) \cdot L(t)) \omega(t)}{|L(t)| |k(t)|} = \frac{|L(t)|}{|k(t)|} \left(\omega(t) - J_L(t) L(t)\right) \\
+B(t) &= \left[\hat{u}(t), \hat{v}(t), \hat{w}(t)\right]
 \end{align*}
 $$
-Now, one thing we can do is expand $\Delta{L}$ as a power series in time. Unlike above, where we expanded the effect of rotating $L_0$ around $\Omega$, we now use Euler's equations to generate derivatives (because the effect of the rotation is already encoded in the condition that the dot product remains unchanged). In both cases we're trying to get the solution to Euler's equations and the rotation around $\Omega$ to coincide at the time $t + \Delta{t}$, but whereas before we expressed an invariant of Euler's equations ($E$) as a series in evolution by rotation, now we express an invariant of the rotation ($L \cdot \Omega$) as a series in evolution by Euler's equations. I start from the standard Taylor expansion formula and compute some derivatives (all evaluated at $t$):
-$$
-\begin{align*}
-\Delta{L} &= \frac{dL}{dt} \Delta{t} + \frac{1}{2} \frac{d^2L}{dt^2} \Delta{t}^2 + \frac{1}{6} \frac{d^3L}{dt^3} \Delta{t}^3 + O(\Delta{t}^4) \\
-\frac{dL}{dt} &= - \omega_0 \times L_0 = -k \\
-\frac{d^2L}{dt^2} &= \omega_0 \times k + (Jk) \times L_0 = [(\omega_0 \cdot L_0) \omega_0 - \omega_0^2 L_0] + (Jk) \times L_0 \\
-\end{align*}
-$$
-Now, plug the Taylor series into our expression for $J'$. To quadratic order in time, we get a constant $J'$:
-$$
-\begin{align*}
-J' &\approx \frac{\omega_0 \cdot (-k) + \frac{1}{2} \omega_0 \cdot [(\omega_0 \cdot L_0) \omega_0 - \omega_0^2 L_0 + (Jk) \times L_0]}{L_0 \cdot (-k) + \frac{1}{2} L_0 \cdot [(\omega_0 \cdot L_0) \omega_0 - \omega_0^2 L_0 + (Jk) \times L_0]} \\
-&= \frac{\omega_0 \cdot (Jk) \times L_0}{[(\omega_0 \cdot L_0)^2 - \omega_0^2 L_0^2 ]} = \frac{-kJk}{-k^2} = J_k\\
-\end{align*}
-$$
-Well what do you know, turns out it's $J_k$ again! Let's try going one step further now:
-$$
-\begin{align*}
--\frac{d^3L}{dt^3} &= \frac{d^2\omega}{dt^2} \times L_0 + 2 \frac{d\omega_0}{dt} \times \frac{dL_0}{dt} + \omega_0 \times \frac{d^2L_0}{dt^2} \\
-&= J\left[[(\omega_0 \cdot L_0) \omega_0 - \omega_0^2 L_0] + (Jk) \times L_0\right] \times L_0 \\
-&\quad + 2 (-Jk) \times (-k) \\
-&\quad + \omega_0 \times \left[[(\omega_0 \cdot L_0) \omega_0 - \omega_0^2 L_0] + (Jk) \times L_0\right] \\
-&= - L_0 \times \left[[(\omega_0 \cdot L_0) J\omega_0 - \omega_0^2 \omega_0] + J[(Jk) \times L_0]\right] \\
-&\quad + 2 Jk \times k \\
-&\quad + \left[-\omega_0^2 k + \omega_0 \times[(Jk) \times L_0]\right] \\
-&= - \left[[(\omega_0 \cdot L_0) L_0 \times J\omega_0 + \omega_0^2 k] + L_0 \times J[(Jk) \times L_0]\right] \\
-&\quad - 2 (\omega_0 Jk) L_0 \\
-&\quad + \left[-\omega_0^2 k + (\omega_0\cdot L_0) (Jk) - (\omega_0 Jk) L_0\right] \\
-&= - \left[[(\omega_0 \cdot L_0) L_0 \times J\omega_0 ] + L_0 \times J[(Jk) \times L_0]\right] \\
-&\quad - 3 (\omega_0 Jk) L_0 \\
-&\quad + \left[-2\omega_0^2 k + (\omega_0\cdot L_0) (Jk)\right] \\
-\omega_0 \cdot \frac{d^3L}{dt^3} &=-(\omega_0\cdot L_0) \omega_0 J k - [Jk \times L_0] \cdot Jk - 3 (\omega_0 Jk) (\omega_0 \cdot L_0) - 2 \omega_0^2 (\omega_0 \cdot k) + (\omega_0\cdot L_0) \omega_0 J k \\
-&= - 3 (\omega_0 \cdot L) (\omega_0 J k) \\
-L_0 \cdot \frac{d^3L}{dt^3} &= - 3 (\omega_0 J k) L_0^2 
-\end{align*}
-$$
-Now,
-$$
-\begin{align*}
-J' &\approx \frac{\omega_0\cdot\frac{d^2L}{dt^2} + \frac{1}{3} \omega_0\cdot\frac{d^3L}{dt^3} \Delta{t}}{L_0\cdot\frac{d^2L}{dt^2} + \frac{1}{3} L_0\cdot\frac{d^3L}{dt^3} \Delta{t}} \\
-&= \frac{kJk + (\omega_0\cdot L_0)(\omega_0Jk)\Delta{t}}{k^2 + L_0^2(\omega_0Jk)\Delta{t}} \\
-&= \frac{J_k k^2 + J_L L_0^2 (\omega_0Jk)\Delta{t}}{k^2 + L_0^2(\omega_0Jk)\Delta{t}} \\
-&= J_k + [J_L - J_k] \frac{\alpha \Delta{t}}{1 + \alpha \Delta{t}}
-\end{align*}
-$$
-The next-lowest order approximation to $J'$ starts at $J_k$ and decays towards $J_L$ with initial rate $\alpha = (\omega_0 J k) L_0^2 / k^2$. Makes sense that $\omega_0 Jk$ would feature, as it's part of the cubic term in the energy equation above.
 
-You could continue this process with higher and higher derivatives of $L$, but the third is already pretty gnarly, so I won't brave that here. The one other thing I will return to briefly is the analytic solution that I mentioned near the start of this article. The analytic solution expresses the individual components $L_x, L_y, L_z$ in body space, using the Jacobi elliptic functions $\mathrm{cn}$, $\mathrm{sn}$ and $\mathrm{dn}$. These functions have addition formulae analogous to (though more complicated than) those for $\sin$ and $\cos$. This means it should be possible to express $L_{(x,y,z)}(t+\Delta{t})$ in terms of $L_{(x,y,z)}(t)$, $J_{(x,y,z)}$  and $\mathrm{cn}(\omega_p \Delta{t})$, $\mathrm{sn}(\omega_p \Delta{t})$, $\mathrm{dn}(\omega_p \Delta{t})$ (where $\omega_p$ is some given frequency dependent on the constants of motion). That would allow writing out 
+Now, the rotation matrix to transform from the basis $B(t)$ to $B(t + \Delta{t})$ can be found:
 $$
-J' = \frac{\omega_0 \cdot (L(t + \Delta{t}) - L(t))}{L_0 \cdot (L(t + \Delta{t}) - L(t))}
+\begin{align*}
+B(t + \Delta{t}) &= Q(\Delta{t}) B(t) \\
+Q(\Delta{t}) &= B(t + \Delta{t}) B(T)^T \\
+&= \hat{u}(t + \Delta{t}) \hat{u}(t)^T + \hat{v}(t + \Delta{t}) \hat{v}(t)^T + \hat{w}(t + \Delta{t}) \hat{w}(t)^T \\
+&= \hat{u}' \hat{u}^T + \hat{v}' \hat{v}^T + \hat{w}' \hat{w}^T
+\end{align*}
 $$
-explicitly, which may or may not end up being a neat formula in the end. 
+
+Now, the well-known conversion between axis-angle and rotation matrix representations is:
+$$
+\begin{align*}
+2 \cos(\theta) &= Q_{11} + Q_{22} + Q_{33} - 1 \\
+&= \hat{u}' \cdot \hat{u} + \hat{v}' \cdot \hat{v} + \hat{w}' \cdot \hat{w} - 1 \\
+2 \hat{n} \sin(\theta) &= \left[\begin{array}{c}
+Q_{32} - Q_{23} \\ Q_{13} - Q_{31} \\ Q_{21} - Q_{12}
+\end{array}\right] \\
+&= \left[\begin{array}{c}
+\hat{u}_2 \hat{u}_3' - \hat{u}_3 \hat{u}_2' + \hat{v}_2 \hat{v}_3' - \hat{v}_3 \hat{v}_2' + \hat{w}_2 \hat{w}_3' - \hat{w}_3 \hat{w}_2' \\ \hat{u}_3 \hat{u}_1' - \hat{u}_1 \hat{u}_3' + \hat{v}_3 \hat{v}_1' - \hat{v}_1 \hat{v}_3' + \hat{w}_3 \hat{w}_1' - \hat{w}_1 \hat{w}_3' \\ \hat{u}_1 \hat{u}_2' - \hat{u}_2 \hat{u}_1' + \hat{v}_1 \hat{v}_2' - \hat{v}_2 \hat{v}_1' + \hat{w}_1 \hat{w}_2' - \hat{w}_2 \hat{w}_1'
+\end{array}\right] \\
+&= \hat{u} \times \hat{u}' + \hat{v} \times \hat{v}' + \hat{w} \times \hat{w}' \\
+\end{align*}
+$$
+
+There are two approaches we could take to evaluating these expressions - $B(t)$ is known, as it's our initial condition. We could choose to expand $B(t + \Delta{t})$ as a power series in $\Delta{t}$, which to first-order would look like this:
+$$
+\begin{align*}
+2 \cos(\theta) &= (\hat{u} + \dot{\hat{u}}) \cdot \hat{u} + (\hat{v} + \dot{\hat{v}}) \cdot \hat{v} + (\hat{w} + \dot{\hat{w}}) \cdot \hat{w} - 1 \\
+&= 2 + \hat{u} \cdot \dot{\hat{u}} + \hat{v} \cdot \dot{\hat{v}} + \hat{w} \cdot \dot{\hat{w}} = 2 \\
+2 \hat{n} \sin(\theta) &=  \hat{u} \times (\hat{u} + \dot{\hat{u}}) + \hat{v} \times (\hat{v} + \dot{\hat{v}}) + \hat{w} \times (\hat{w} + \dot{\hat{w}}) \\
+&=  \hat{u} \times \dot{\hat{u}} + \hat{v} \times \dot{\hat{v}} + \hat{w} \times \dot{\hat{w}}
+\end{align*}
+$$
+
+Working through this results in the same result we already have: to first order, $-\hat{n} \theta = \Omega \Delta{t} = (\omega - J_k L) \Delta{t}$. I'll spare you the full calculation (and I've not checked it thoroughly), but to second order, the axis looks something like:
+$$
+\begin{align}
+\Omega &= (\omega - J_k L) - \frac{1}{2} \frac{L^2}{k^2} (\omega J k) (\omega - J_L L + 2 (J_k - J_L) L ) \Delta{t} \\
+&= \left(1 - \frac{1}{2} \beta \Delta{t}\right) (\omega - J_k L) - \frac{3}{2} \beta \Delta{t} (J_k - J_L) L
+
+\end{align}
+$$
+
+The other approach to think about is using the Jacobi solution to the Euler equations to evaluate the expressions for $2 \cos(\theta)$ and $2 \hat{n} \sin(\theta)$ exactly. Unfortunately I haven't managed to find a nice form of these equations yet, but it's something I've been thinking about and I might write a future post if I get anywhere with it.
 
 ### My recommendation
 
 I have two recommendations for authors of rigid body simulations, depending on their preference.
 
-#### "Modified Jolt Method"
+#### "Modified Jolt" Method
 
 Continue to use the typical split between (angular) velocity integration and position (orientation) integration: 
 $$
@@ -521,7 +527,7 @@ L_1 &= L_0 + 2 \frac{u + \phi \times u}{1 + |\phi|^2}
 $$
 
 
-#### "Momentum-first" method
+#### "Momentum-first" Method
 
 Treat the velocity update stage as a *momentum* update:
 $$
