@@ -1,3 +1,19 @@
+tags: 
+  - physics
+  - maths
+  - simulation
+---
+
+<style>
+    iframe {
+        width: 100%; 
+        height: 750px;
+        aspect-ratio: 16/9;
+        margin: auto;
+        display: block;
+    }
+</style>
+
 When simulating rigid-body dynamics in three dimensions, we quickly run into an issue that's not present in two: rotating objects in three dimensions behave in ways that can be surprising and are kind of weird. In this post I'll present a theoretical framework for describing this behaviour, then look at some existing approaches to simulating the motion of rotating rigid bodies and finally suggest a method with improved energy conservation properties, which I believe to be novel.
 
 ## First Principles
@@ -123,20 +139,23 @@ $$
 \dot{L}_3 + (J_1 - J_2) L_1 L_2 = 0
 \end{align*}
 $$
-I like these equations because they involve only quantities that are constant in one frame or the other: as $L_b$ changes in the body frame, it's clear that the body must have rotated in world space such that $L_w$ remains unchanged. 
+I like these equations because they involve only quantities that are constant in one frame or the other: as $L_b$ changes in the body frame, it's clear that the body must have rotated in world space such that $L_w$ remains unchanged.
 
-Note that just knowing the evolution of the angular momentum (or angular velocity) vector in body space does not _fully_ specify the solution we're looking for, that is the evolution of the object's orientation in world space. The body-space solution is blind to rotations of the body around the angular momentum, as these do not affect the body-space angular momentum.
+An interesting thing to note here is that the body-space evolution of the angular momentum is insensitive to the absolute values of the three principal inverse inertias, as it only depends on differences between them. Any multiple of the identity matrix can be added to $J$ and the trajectory of the $L$ vector in the body frame remains unchanged. Furthermore, because each term in the Euler momentum equations is either a time derivative, proportional to the $J$ components, or zero, constant multiples of the same $J$ matrix all produce the same overall trajectory of $L$ in body space with the only difference being a scaling of the time evolution: the angular momentum of a body with inverse inertia $2J_0$ will take the same path through body-space as that of a body with inverse inertia $J_0$, but the $L$ vector of the first body will move through its local frame twice as fast as that of the second body.
+
+Note however that even knowing the exact evolution of the angular momentum vector in body space does not _fully_ specify the solution we're looking for, that is the evolution of the object's orientation in world space. The body-space solution is blind to rotations of the body around the angular momentum, as these do not affect the body-space angular momentum.
 
 A full solution can be obtained by choosing a unit vector orthogonal to the angular momentum, call it $v$. Then, the motion of the body consists of choosing the rotation which both fulfils the Euler equations *and* maintains the direction of $v$ in world-space. The evolution of $v$ in world-space is constrained to the plane perpendicular to the angular momentum, so it can be described as a rotation around the angular momentum. Composing the rotation induced by evolving the Euler equations (to keep $L$ and $v$ constant in world-space) with a rotation around $L$ itself (to match the needed evolution of $v$ in world-space) produces the full dynamics.
 
-An analytic solution to the Euler equation is attributed to Jacobi, and is expressed in terms of the Jacobi elliptic functions, a set of integrals. Full solutions based on the Jacobi solution to the Euler equations are presented in - for example - [Numerical implementation of the exact dynamics of
-free rigid bodies](https://arxiv.org/pdf/cond-mat/0607529) and [The Exact Computation of the Free Rigid Body Motion and Its Use in Splitting Methods](https://epubs.siam.org/doi/10.1137/070704393) ([preprint](https://www.math.ntnu.no/preprint/numerics/2007/N6-2007.pdf) available). In particular, the approach proposed in the latter paper, using a unit vector proportional to the time derivative of (body-space) angular momentum as $v$, stands out to me as particularly elegant.
+It is this additional rotation around $L$ that is affected by offsets to $J$: compared to a body with inverse inertia $J_0$, a body with inverse inertia $J_0 + \Delta{J}\ \mathbb{1}$  (where $\Delta{J}$ is a scalar and $\mathbb{1}$ still the identity matrix) rotates with an additional angular velocity  $\Delta{J} L$. As with the body-space evolution, scaling $J$ applies a similar scaling to the speed of the rotation component around $L$.
+
+An analytic solution to Euler's equations is attributed to Jacobi, and is expressed in terms of the Jacobi elliptic functions, defined by of integrals. Full solutions based on the Jacobi solution to the Euler equations are presented in - for example - [Numerical implementation of the exact dynamics of free rigid bodies](https://arxiv.org/pdf/cond-mat/0607529)  and [The Exact Computation of the Free Rigid Body Motion and Its Use in Splitting Methods](https://epubs.siam.org/doi/10.1137/070704393) ([preprint](https://www.math.ntnu.no/preprint/numerics/2007/N6-2007.pdf) available). In particular, the approach proposed in the latter paper, using a unit vector proportional to the time derivative of (body-space) angular momentum as $v$, stands out to me as particularly elegant. We'll rediscover it later.
 
 Now I've covered the general shape of the problem, I will focus on the three particular special cases: the spherical top, the symmetric top and the asymmetric top.
 
 ## The Spherical Top
 
-If we're just thinking about the most symmetric objects, everything is fine. Spheres and cubes fit into this category, as do other platonic solids. The moment of inertia of an object in this category is isotropic - a scalar multiple of the identity matrix - which means that their angular velocity and angular momentum are always parallel to one another. In the absence of external torques, these objects will just spin around that common axis forever perfectly happily, with constant angular velocity.
+If we're just thinking about the most symmetric objects, everything is fine. Spheres and cubes fit into this category, as do other platonic solids and anything that has the right symmetries. The moment of inertia of an object in this category is isotropic - a scalar multiple of the identity matrix - which means that their angular velocity and angular momentum are always parallel to one another. In the absence of external torques, these objects will just spin around that common axis forever perfectly happily, with constant angular velocity.
 
 Euler's equations become trivial in this case, because $J_1 = J_2 = J_3$:
 $$
@@ -152,7 +171,7 @@ $$
 The next simplest category of objects are those with two of their principal angular inertia values identical, and one different, exemplified by the cylinder. You could imagine that it makes a difference whether the cylinder is a long rod (with its unique principal inertia greater than the others) or a disc (with unique inertia less than the other two), and while these cases look quite different the mathematics works out mostly the same in both cases.
 The cylindrical object will, if its angular momentum is oblique (neither parallel nor perpendicular) to its special axis, spin in a precessing pattern. It's easiest to think about this motion as spinning at a particular speed around the axis of the object, composed with a rotation of that axis around the angular momentum vector (which, as a conserved quantity, remains constant).
 
-Looking at the Euler equation, with $J_1 = J_2 = J_\perp$ and $J_3 = J_\parallel$ :
+Looking at the Euler equation, set $J_1 = J_2 = J_\perp$ and $J_3 = J_\parallel$ :
 $$
 \begin{align*}
 \dot{L}_1 + (J_2 - J_3) L_2 L_3 &= 0 \\
@@ -192,15 +211,15 @@ All in all, we have:
 $$
 R(t + \Delta t) = Q(J_\perp L_w \Delta t) Q((J_w - J_\perp)L_w \Delta t) R(t)
 $$
-This amounts to a "splitting" the contribution of the total angular velocity $J_w L_w$ into the "axial" rotation $Q[(J-J_\perp) L \Delta t]$ (which solves the Euler equation, rotating the angular momentum in body space (or equivalently the body in world space) in a way that preserves the rotational energy of the body) and the "precessional" rotation $Q[J_\perp L \Delta t]$, which rotates the body around the angular momentum vector and therefore does not affect any of our conserved quantities. 
+This amounts to a "splitting" the contribution of the total angular velocity $J_w L_w$ into the "axial" rotation $Q[(J-J_\perp) L \Delta t]$ (which solves the Euler equation, rotating the angular momentum in body space (or equivalently the body in world space) in a way that preserves the rotational energy of the body) and the "precessional" rotation $Q[J_\perp L \Delta t]$, which rotates the body around the angular momentum vector and therefore does not affect any of our conserved quantities. This matches the body-space/world-space splitting discussed in the previous section.
 
 ## The Asymmetric Top
 
 The most complicated, and most general type of body is referred to as the asymmetric top. Bodies in this category have three distinct principal moments of inertia, and can "tumble" in ways that appear unpredictable and chaotic. If you're reading this, and have got this far, you're probably already aware of the [Dzhanibekov effect/Tennis racquet theorem/intermediate axis theorem](https://en.wikipedia.org/wiki/Tennis_racket_theorem). If not, the linked Wikipedia page has a bunch of nice demonstrations of it. 
 
-The long and short of it is: an asymmetric object that's rotating with angular momentum mostly aligned to its "shortest" or "longest" axis will precess in a little ellipse, similar to the way a symmetric object precesses in a circle. As the angular momentum approaches the intermediate axis, the nice ellipse distorts into a weird shape (Wikipedia compares it to a taco, I'd reach for pringles as a comparison). If its angular momentum is close enough to the "intermediate" axis, the precessions are less like a steady, gentle rocking back and forth, and more like a periodic, violent inversion of the object. An analytic solution for this motion (the equivalent to what I presented above for the more symmetric classes of body) _does exist_, but it uses significantly more exotic special functions than the trig functions I've been relying on thus far (in Rodrigues' formulas for rotation operators). The papers mentioned above go through the exact solution using the Jacobi elliptic functions $\mathrm{cn}$, $\mathrm{sn}$ and $\mathrm{dn}$ which roughly resemble $\cos$, $\sin$ and $1$ respectively. Their behaviour is modified by a parameter $0 \leq m \leq 1$ which quantifies how "taco-like" the precessions are, and increases as the angular momentum gets closer to the intermediate axis. 
+The long and short of it is: an asymmetric object that's rotating with angular momentum mostly aligned to its "shortest" or "longest" axis will precess in a little ellipse, similar to the way a symmetric object precesses in a circle. As the angular momentum approaches the intermediate axis, the nice ellipse distorts into a weird shape (Wikipedia compares it to a taco, I'd more readily reach for pringles as a comparison). If its angular momentum is close enough to the "intermediate" axis, the precessions are less like a steady, gentle rocking back and forth, and more like a periodic, violent inversion of the object. An analytic solution for this motion (the equivalent to what I presented above for the more symmetric classes of body) _does exist_, but it uses significantly more exotic special functions than the trig functions I've been relying on thus far (in Rodrigues' formulas for rotation operators). The papers mentioned above go through the exact solution using the Jacobi elliptic functions $\mathrm{cn}$, $\mathrm{sn}$ and $\mathrm{dn}$ which roughly resemble $\cos$, $\sin$ and $1$ respectively. Their behaviour is modified by a parameter $0 \leq m \leq 1$ which quantifies how "taco-like" the precessions are, and increases as the angular momentum gets closer to the intermediate axis. 
 
-I'll review some prior art for solving this general case, talking through how well they obey the conservation laws I wrote at the top of this post.
+I'll review some prior art for solving this general case, talking through how well they obey the conservation laws I detailed at the top of this post.
 
 ### Forward Euler
 
@@ -219,7 +238,7 @@ L_1^2 = |I\omega_1|^2 &= \omega_0 I^2 \omega_0 - 2 \omega_0 I^2 J (\omega_0 \tim
 &= L_0^2 + k^2 \Delta{t}^2
 \end{align*}
 $$
-The quantity $\omega_0 \times L_0$ is going to appear repeatedly, so I've given it a shorthand name, $k$. As the squared magnitude of a vector, $k^2$ is non-negative, so the magnitude of the angular momentum increases monotonically. This is actually worse than it looks: As $k = (JL) \times L$ is quadratic in the magnitude of the angular momentum, $L_0^2 \approx L_0^2 + L_0^4 \Delta{t}^2$ - the growth in the angular momentum is _faster than exponential_.
+The quantity $\omega_0 \times L_0$ is going to appear repeatedly, so I've given it a shorthand name, $k$. As the squared magnitude of a vector, $k^2$ is non-negative, so the magnitude of the angular momentum increases monotonically. This is actually worse than it looks: As $k = (JL) \times L$ is quadratic in the magnitude of the angular momentum, $L_0^2 \approx L_0^2 + L_0^4 \Delta{t}^2$ - the growth in the angular momentum is _faster than exponential_. It blows up to infinity in finite time - both analytically and in my numerical tests
 
 Needless to say, energy conservation also doesn't come out of this well:
 $$
@@ -255,6 +274,15 @@ $$
 Here I have introduced the notation $kJk = J_k k^2$ and similarly $L_0 J L_0 = J_L L_0^2$. The $J_k$ and $J_L$ values are the effective scalar magnitude of the matrix $J$, in the direction of $k$ and $L_0$ respectively, which are necessarily bounded by the eigenvalues of $J$ and will generally be some weighted average of those eigenvalues. The timestep-dependent factor $\frac{\Delta{t}^2 k^2/L_0^2}{1 + \Delta{t}^2 k^2/L_0^2}$ looks like a quadratic for small values of its parameter, $|k|\Delta{t}/|L_0| = |\omega_0| \Delta{t} \sin{\theta}$ but saturates to 1 as the parameter becomes large. Importantly, the sign of $\Delta{E}$ is now not necessarily positive. $(J_k - J_L)$ can be either positive or negative, and qualitative experimentation indicates that the overall effect over several timesteps is a reasonably good conservation of energy. In particular, because $J_\mathrm{min} \leq J_L \leq J_\mathrm{max}$ and $2E = J_L L^2$ and because this method explicitly conserves $L^2$, the energy is bounded from above and below: $\frac{1}{2} J_\mathrm{min} L_0^2 \leq E \leq \frac{1}{2} J_\mathrm{max} L_0^2$.
 
 When applied to a cylindrical body, it's not too hard to see that $J_k$ is a constant, $J_k = J_\perp$. Because $2 \Delta{E} = \Delta{J_L} L_0^2$, for cylindrical bodies this looks like an evolution towards $J_L = J_\perp$, and bodies of this type will slowly align their multiplicity-2 axis with their angular momentum. For oblate (puck-like) bodies $J_\perp < J_\parallel$ and so energy is lost; for prolate (rugby ball-like) bodies $J_\perp > J_\parallel$ so energy is gained. In both cases the energy is bounded by $L_0^2 J_\perp / 2$, though.
+
+Through numerical experiments, I noticed that this method in fact seems to cause $J_L$ to approach the median principal inverse inertia, call it $J_2$. Having seen this I was able to go through some *very* tedious algebra to find that $(J_k - J_L) k^2 = -(J_1 - J_L)(J_2 - J_L)(J_3 - J_L) L_0^4 = -L_0^4 \det (J-J_L)$. 
+$$
+\begin{align}
+2 \Delta{E} &= (J_k - J_L) L_0^2 \frac{\Delta{t}^2 k^2/L_0^2}{1 + \Delta{t}^2 k^2/L_0^2} \\
+\Delta{J_L}&= [J_3 - J_L][J_L - J_1][J_2 - J_L] \frac{L_0^2 \Delta{t}^2}{1 + k^2/L_0^2 \Delta{t}^2}
+\end{align}
+$$
+Without loss of generality I assume the ordering $J_3 > J_2 > J_1$, and because $J_L$ is a combination of the three principal $J$ values, we also have $J_3 > J_L > J_1$. Then, $J_2 - J_L$ is the only factor in the above term that can be either positive or negative. $[J_3 - J_L]$, $[J_L - J_1]$ and $\frac{L_0^2 \Delta{t}^2}{1 + k^2/L_0^2 \Delta{t}^2}$  are unconditionally positive, meaning that the increment of $J_L$ is a positive multiple of $J_2 - J_L$. This is positive for $J_L < J_2$ and negative for $J_L > J_2$ so $J_L$ is pushed towards $J_2$ in all cases. This has a stabilising effect, meaning energy tends towards a limiting value determined by the median eigenvalue of $J$. For cylindrical bodies, the median eigenvalue is the repeated one, $J_\perp$ and so a long bar will gradually "lie down" to rotate around its short axes. A flat plate will gradually "stand up" to rotate around its wide axes.
 
 ### Rotating the Angular Momentum
 
@@ -298,9 +326,9 @@ $$
 
 To lowest order in time,
 $$\Delta{E} = \frac{1}{2}\mathrm{sinc}^2\left(\frac{\omega_0\Delta{t}}{2}\right)\cos^2\left(\frac{\omega_0\Delta{t}}{2}\right) kJk \Delta{t}^2 = \frac{1}{2} kJk \Delta{t}^2.$$
-We still have the monotonic growth in energy shown by the explicit method, not the $(J_k - J_L)$ factor we had for the Jolt method (although now that $L^2$ is conserved, at least the maximum energy is bounded).
+We still have the monotonic growth in energy shown by the explicit method, not the $(J_k - J_L)$ factor we had for the Jolt method (although now that $L^2$ is conserved, at least the maximum energy is bounded). Unlike the Jolt method, which causes $J_L$ to approach the median eigenvalue of $J$, this new method causes it to approach the largest eigenvalue of $J$. For cylindrical bodies, the largest eigenvalue of $J$ is $J_\parallel$ for long bars and $J_\perp$ for flat plates. Therefore a long bar will - contrary to the Jolt method - "stand up" to spin around its long axis. A flat plate will behave similarly to the Jolt method.
 
-This isn't what we wanted, and implies the Jolt method is actually doing something different to just "low order approximation to rotating around $\omega_0$". It took me a long time and a lot of scribbling to figure out what the difference is, and the key is that the normalisation step, $L_1 = L' \sqrt{L_0^2 / L'^2}$, shrinks *all* components of $L'$ isotropically, whereas a *true* rotation leaves the component of a vector parallel to the axis unchanged. Then I realised that while $L' = L_0 - \omega_0 \times L_0 \Delta{t}$ is *indeed* a first-order approximation to a rotation around $\omega_0$, it's not a one-to-one correspondence: treated as a linear operator, the cross product with $L_0$ has a zero eigenvalue (with the corresponding eigenvector being $L_0$ itself). That means that for *any* real scalar value $J'$, the above expression is a first-order approximation to a rotation around $\omega_0 - J' L_0$, with the same $\Delta{t}$:
+This isn't what we wanted, and implies the Jolt method is actually doing something different to just "low order approximation to rotating around $\omega_0$". It took me a long time and a lot of scribbling to figure out what the difference is, and the key is that the normalisation step, $L_1 = L' \sqrt{L_0^2 / L'^2}$, shrinks *all* components of $L'$ isotropically, whereas a *true* rotation leaves the component of a vector parallel to the axis unchanged. Then I realised that while $L' = L_0 - \omega_0 \times L_0 \Delta{t}$ is *indeed* a first-order approximation to a rotation around $\omega_0$, it's not a one-to-one correspondence: treated as a linear operator, the cross product with $L_0$ has a zero eigenvalue (with the corresponding eigenvector being $L_0$ itself). That means that for *any* scalar value $J'$, the above expression is a first-order approximation to a rotation around $\omega_0 - J' L_0$, with the same $\Delta{t}$:
 $$
 \begin{align*}
 L' &= L_0 - (\omega_0 - J' L_0) \times L_0 \Delta{t}\\
@@ -310,7 +338,7 @@ L' &= L_0 - (\omega_0 - J' L_0) \times L_0 \Delta{t}\\
 $$
 ### The Jolt Method in Rotation Form (Properly)
 
-All that's now necessary to reproduce the Jolt method is to figure out the right value of $J'$. Then the Jolt method is approximately a rotation with angular velocity $\Omega = \omega_0 - J' L_0$. The key insight here is that if $L_1 = L' \sqrt{L_0^2 / L'^2}$, shrinks all of the components of $L'$, but the component parallel to the axis must be unchanged, then that component must be zero!
+It turns out that all we need to do to reproduce the Jolt method is figure out the right value of $J'$. Then the Jolt method is approximately a rotation with angular velocity $\Omega = \omega_0 - J' L_0$. The key insight here is that if $L_1 = L' \sqrt{L_0^2 / L'^2}$, shrinks all of the components of $L'$, but the component parallel to the axis must be unchanged, then that component must be zero!
 $$
 \begin{align*}
 L' \cdot \Omega &= 0 \\
@@ -360,7 +388,10 @@ $$
 &= s^2 c^2 (J_k - J_L) k^2 \Delta{t}^2 
 \end{align*}
 $$
-Whew. That's what we were shooting for though! This method is good because the quadratic term is *not* always positive, and as an added bonus the higher-order terms vanish (apart of course from the terms arising due to the sinc and cosine terms, which is a multiplier of $O(1 - \Omega^2 \Delta{t}^2 / 24)$) 
+Whew. That's what we were shooting for though! This method is good because the quadratic term is *not* always positive, and as an added bonus the higher-order terms vanish (apart of course from the terms arising due to the sinc and cosine terms, which is a multiplier of $O(1 - \Omega^2 \Delta{t}^2 / 24)$). Using that result from previously to simplify $(J_k - J_L)$, we can also write this as:
+$$
+2\Delta{E} = - s^2 c^2 \det (J - J_L) L_0^4 \Delta{t}^2
+$$ 
 
 The next question is of course: Can we do any better? Can we nix the quadratic term entirely?
 
@@ -368,7 +399,7 @@ The next question is of course: Can we do any better? Can we nix the quadratic t
 
 We've now established that stepping the Euler equations using a rotation around a modified angular momentum $\Omega = \omega_0 - J' L_0$ can work well, showing that $J' = J_L$ produces results comparable to the Jolt method. But could a different value of $J'$ produce even better results?
 
-There's a few different approaches we could take to this, and they all give the same answer. Let's think about the time derivatives of the rotational energy. Rather than Euler's equations, I'll treat the evolution as a rotation about $\Omega$ and we'll see what happens
+There's a few different approaches we could take to this, and they all give the same answer. Let's think about the time derivatives of the rotational energy. Rather than evaluating derivatives using Euler's equations, I'll treat the evolution as a rotation about $\Omega$ and we'll see what happens
 $$
 \begin{align*}
 0 = 2 \frac{dE}{dt} &= \frac{d}{dt} (L J L) \\
@@ -431,65 +462,21 @@ J - J_k &= \mathrm{diag} [0,0,J_\parallel - J_\perp] \\
 $$
 As expected, exact conservation for the symmetric top!
 
-### Going Further
+### Numerical Experiments
 
-If we'd like to go further than this, I'll refer back to the algorithm mentioned above: evolve $L$ according to the Euler equations, then figure out the rotation that takes $L(t)$ and $k(t)$ to $L(t+\Delta{t})$ and $k(t + \Delta{t})$ respectively. Rotate the body by the inverse of that rotation, then rotate it around $L$ to achieve the correct rotation of $k$ in world-space.
+I've put together a little toy to let me play with these algorithms, embedded below (assuming it works... I'm not a web dev I don't know what I'm doing).
 
-Now, I'll define a "dynamical basis" formed from three orthogonal unit vectors at a given time:
-$$
-\begin{align*}
-\hat{u}(t) &= \frac{L(t)}{|L(t)|} \\
-\hat{v}(t) &= \frac{k(t)}{|k(t)|} \\
-\hat{w}(t) &= \frac{L(t) \times k(t)}{|L(t) \times k(t)|} = \frac{L(t)^2 \omega(t) - (\omega(t) \cdot L(t)) \omega(t)}{|L(t)| |k(t)|} = \frac{|L(t)|}{|k(t)|} \left(\omega(t) - J_L(t) L(t)\right) \\
-B(t) &= \left[\hat{u}(t), \hat{v}(t), \hat{w}(t)\right]
-\end{align*}
-$$
+<iframe src="spin_analysis/plots.html"></iframe>
 
-Now, the rotation matrix to transform from the basis $B(t)$ to $B(t + \Delta{t})$ can be found:
-$$
-\begin{align*}
-B(t + \Delta{t}) &= Q(\Delta{t}) B(t) \\
-Q(\Delta{t}) &= B(t + \Delta{t}) B(T)^T \\
-&= \hat{u}(t + \Delta{t}) \hat{u}(t)^T + \hat{v}(t + \Delta{t}) \hat{v}(t)^T + \hat{w}(t + \Delta{t}) \hat{w}(t)^T \\
-&= \hat{u}' \hat{u}^T + \hat{v}' \hat{v}^T + \hat{w}' \hat{w}^T
-\end{align*}
-$$
+The way it works is this: The "range" of the principal inverse moments, $J_\mathrm{max} - J_\mathrm{min}$ has a fixed value of 1, because changing it is equivalent to changing the timestep and duration of the simulation by the same factor. You can use the first slider to adjust the "slow" (small) inverse moment $J_\mathrm{min}$ between 0.1 and 5, adding a constant value to all of the inverse moments. Changing this value only changes the exact solution in terms of the world-space rotation about the angular momentum; it should not affect the body-space trajectory of the angular momentum vector. How well this symmetry is preserved in practice is a property of the different simulation methods. The "median" inverse moment  $J_\mathrm{mid}$ varies between $J_\mathrm{min}$ and $J_\mathrm{max}$, controlled using the second slider. The "energy" slider adjusts the initial rotational energy of a simulated body between the minimum ($J_L = J_\mathrm{min}$) and maximum ($J_L = J_\mathrm{max}$) possible values, and you can set the (approximate) number of timesteps per rotation to use. Setting the "Energy" and "Median J" sliders close to each other produces the highly "taco-shaped" trajectories of the Dzhanibekov effect, and setting "Median J" all the way to the left or right produces "symmetric top" behaviour corresponding to a long bar or a flat plate respectively.
 
-Now, the well-known conversion between axis-angle and rotation matrix representations is:
-$$
-\begin{align*}
-2 \cos(\theta) &= Q_{11} + Q_{22} + Q_{33} - 1 \\
-&= \hat{u}' \cdot \hat{u} + \hat{v}' \cdot \hat{v} + \hat{w}' \cdot \hat{w} - 1 \\
-2 \hat{n} \sin(\theta) &= \left[\begin{array}{c}
-Q_{32} - Q_{23} \\ Q_{13} - Q_{31} \\ Q_{21} - Q_{12}
-\end{array}\right] \\
-&= \left[\begin{array}{c}
-\hat{u}_2 \hat{u}_3' - \hat{u}_3 \hat{u}_2' + \hat{v}_2 \hat{v}_3' - \hat{v}_3 \hat{v}_2' + \hat{w}_2 \hat{w}_3' - \hat{w}_3 \hat{w}_2' \\ \hat{u}_3 \hat{u}_1' - \hat{u}_1 \hat{u}_3' + \hat{v}_3 \hat{v}_1' - \hat{v}_1 \hat{v}_3' + \hat{w}_3 \hat{w}_1' - \hat{w}_1 \hat{w}_3' \\ \hat{u}_1 \hat{u}_2' - \hat{u}_2 \hat{u}_1' + \hat{v}_1 \hat{v}_2' - \hat{v}_2 \hat{v}_1' + \hat{w}_1 \hat{w}_2' - \hat{w}_2 \hat{w}_1'
-\end{array}\right] \\
-&= \hat{u} \times \hat{u}' + \hat{v} \times \hat{v}' + \hat{w} \times \hat{w}' \\
-\end{align*}
-$$
+A body is simulated rotating with initial angular momentum along the z-axis and of unit magnitude. The graphs show how the simulation progresses. By default the results are shown for four integrators: the basic explicit integrator, the Jolt integrator, the naive rotation algorithm, and the two approaches I propose in the next section. To focus on one or another, you can toggle visibility for the lines from each integrator by clicking its entry in the legend below the graphs.
 
-There are two approaches we could take to evaluating these expressions - $B(t)$ is known, as it's our initial condition. We could choose to expand $B(t + \Delta{t})$ as a power series in $\Delta{t}$, which to first-order would look like this:
-$$
-\begin{align*}
-2 \cos(\theta) &= (\hat{u} + \dot{\hat{u}}) \cdot \hat{u} + (\hat{v} + \dot{\hat{v}}) \cdot \hat{v} + (\hat{w} + \dot{\hat{w}}) \cdot \hat{w} - 1 \\
-&= 2 + \hat{u} \cdot \dot{\hat{u}} + \hat{v} \cdot \dot{\hat{v}} + \hat{w} \cdot \dot{\hat{w}} = 2 \\
-2 \hat{n} \sin(\theta) &=  \hat{u} \times (\hat{u} + \dot{\hat{u}}) + \hat{v} \times (\hat{v} + \dot{\hat{v}}) + \hat{w} \times (\hat{w} + \dot{\hat{w}}) \\
-&=  \hat{u} \times \dot{\hat{u}} + \hat{v} \times \dot{\hat{v}} + \hat{w} \times \dot{\hat{w}}
-\end{align*}
-$$
+The first two plots are line graphs: the first showing the "energy factor" $J_L$ and the second showing the magnitude of the angular momentum throughout the simulation. A time-axis slider located above these graphs can be used to zoom in on a smaller region of the simulation time. Both of these line graphs should stay as close as possible to their original values to fulfil physical conservation laws.
 
-Working through this results in the same result we already have: to first order, $-\hat{n} \theta = \Omega \Delta{t} = (\omega - J_k L) \Delta{t}$. I'll spare you the full calculation (and I've not checked it thoroughly), but to second order, the axis looks something like:
-$$
-\begin{align}
-\Omega &= (\omega - J_k L) - \frac{1}{2} \frac{L^2}{k^2} (\omega J k) (\omega - J_L L + 2 (J_k - J_L) L ) \Delta{t} \\
-&= \left(1 - \frac{1}{2} \beta \Delta{t}\right) (\omega - J_k L) - \frac{3}{2} \beta \Delta{t} (J_k - J_L) L
+The polar plot below the "energy factor" line graph shows the evolution of the transverse (x and y) components of the angular momentum throughout the simulation. This should stay as close to the origin as possible, as the direction of the angular momentum should remain constant in world space. 
 
-\end{align}
-$$
-
-The other approach to think about is using the Jacobi solution to the Euler equations to evaluate the expressions for $2 \cos(\theta)$ and $2 \hat{n} \sin(\theta)$ exactly. Unfortunately I haven't managed to find a nice form of these equations yet, but it's something I've been thinking about and I might write a future post if I get anywhere with it.
+Finally, the remaining three polar plots show the evolution of the body-space angular momentum throughout the simulation. The bottom-right plot shows the x and z components (aligned with the minimum and maximum principal values of $J$ respectively). The plot to its left shares its vertical axis (showing the y and z components of $L_b$) and the one above it shares its horizontal axis (showing the x and y components). These three plots should represent a closed loop, because the body-space trajectory of the angular momentum is periodic. If they instead spiral in towards the x-axis, energy is being lost, and if they spiral towards the z-axis, energy is being gained. If instead (as the Jolt method does) the trajectory becomes more irregular over time, then $J_L$ is approaching $J_\mathrm{mid}$. These three plots should be insensitive to the value chosen on the "Min J" slider, but this is not the case for the "naive rotation" method.
 
 ### My recommendation
 
@@ -508,11 +495,12 @@ $$
 For the velocity update, use:
 $$
 \begin{align*}
-L_0 &= J^{-1} \omega_0 + \tau \Delta{t} \\
-k &= \omega_0 \times L_0 \\
+L' &= J^{-1} \omega_0 + \tau \Delta{t} \\
+\omega' &= J L' \\
+k &= \omega' \times L' \\
 J' &= \frac{k\cdot Jk}{k^2} \\
-\Omega &= \omega_0 - J' L_0 \\
-L_1 &= Q(-\Omega \Delta{t}) L_0 \\
+\Omega &= \omega' - J' L' \\
+L_1 &= Q(-\Omega \Delta{t}) L' \\
 \omega_1 &= J L_1
 \end{align*}
 $$
@@ -521,29 +509,29 @@ Optionally, use the "fast length-preserving rotation" found at the start of this
 $$
 \begin{align*}
 \vec{\phi} &= -\frac{1}{2} \vec{\Omega}\Delta{t} \\
-u &= \phi \times L_0 \\
-L_1 &= L_0 + 2 \frac{u + \phi \times u}{1 + |\phi|^2}
+u &= \phi \times L' \\
+L_1 &= L' + 2 \frac{u + \phi \times u}{1 + |\phi|^2}
 \end{align*}
 $$
-
-
+The advantage of this approach is that it can slot naturally into a conventional physics engine integrator, replacing the handling of gyroscopic effects that is already implemented. It inherits from that general approach the disadvantage that the direction of angular momentum in world space is only approximately conserved, in contrast to my next suggestion
 #### "Momentum-first" Method
 
 Treat the velocity update stage as a *momentum* update:
 $$
 \begin{align*}
 L' &= L_0 + \tau \Delta{t} \\
-\omega' &= (R_0 J R_0^T) L_1
+\omega' &= J_w L'
 \end{align*}
 $$
 For the position update, perform the relevant rotation and update the angular velocity to reflect the new orientation afterwards.
 $$
 \begin{align*}
 k &= \omega' \times L' \\
-J' &= \frac{k \cdot Jk }{k^2} \\
+J' &= \frac{k \cdot J_w k }{k^2} \\
 \Omega &= \omega' - J' L' \\
 R_1 &= Q(J' L' \Delta{t}) Q(\Omega \Delta{t}) R_0 \\
-\omega_1 &= (R_1 J R_1^T) L'
+J_w &= R_1 J_b R_1^T \\
+\omega_1 &= J_w L'
 \end{align*}
 $$
 This treats angular momentum and orientation as the "fundamental" quantities, and angular velocity as something derived from a given momentum and orientation. Unlike the first option, it naturally preserves the direction of the angular momentum, not just its magnitude. It is a bit more of a radical departure from typical design of a rigid body integrator though.
